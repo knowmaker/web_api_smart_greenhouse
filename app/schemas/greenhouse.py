@@ -1,4 +1,6 @@
 from pydantic import BaseModel
 
 class GreenhouseCreate(BaseModel):
-    label: str
+    title: str
+    guid: str
+    pin: str
