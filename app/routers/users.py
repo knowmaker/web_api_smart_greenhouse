@@ -5,6 +5,8 @@ from app.schemas.user import UserCreate, UserLogin
 from app.models.user import User
 from app.dependencies import get_db
 from app.utils.authentication import hash_password, verify_password, create_access_token
+from app.utils.authentication import get_current_user, auth_scheme
+from fastapi.security import HTTPAuthorizationCredentials
 
 router = APIRouter()
 
@@ -29,3 +31,18 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": db_user.email})
 
     return JSONResponse(content={"access_token": access_token, "token_type": "bearer"})
+
+@router.get("/me")
+def get_me(
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+
+    user_id = get_current_user(token, db)
+    current_user = db.query(User).filter(User.id_user == user_id).first()
+
+    return JSONResponse( content = {
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+    },
+        headers={"Content-Type": "application/json; charset=utf-8"})
