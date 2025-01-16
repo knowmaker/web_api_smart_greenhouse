@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
-from app.schemas.sensor_reading import SensorReadingCreate
 from app.models.sensor_reading import SensorReading
 from app.models.sensor import Sensor
 from app.models.greenhouse import Greenhouse
@@ -13,15 +12,23 @@ from fastapi.security import HTTPAuthorizationCredentials
 router = APIRouter()
 
 @router.get("/{guid}")
-def get_latest_sensor_readings(guid: str, db: Session = Depends(get_db), token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+def get_latest_sensor_readings(
+    guid: str,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
     user_id = get_current_user(token, db)
 
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+        )
 
     if greenhouse.id_user != user_id:
-        raise HTTPException(status_code=403, detail="Access denied to this greenhouse")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+        )
 
     subquery = (
         db.query(
@@ -45,7 +52,9 @@ def get_latest_sensor_readings(guid: str, db: Session = Depends(get_db), token: 
     )
 
     if not latest_readings:
-        raise HTTPException(status_code=404, detail="No sensor readings found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Данные с датчиков не найдены"
+        )
 
     response_data = {
         "latest_readings": [
@@ -57,4 +66,7 @@ def get_latest_sensor_readings(guid: str, db: Session = Depends(get_db), token: 
         ],
     }
 
-    return JSONResponse(content=response_data)
+    return JSONResponse(
+        content=response_data,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )

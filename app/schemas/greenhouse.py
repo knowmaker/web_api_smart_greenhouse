@@ -11,3 +11,6 @@ class GreenhouseBind(BaseModel):
 
 class GreenhouseUnbind(BaseModel):
     guid: str
+
+class GreenhouseUpdate(BaseModel):
+    title: str

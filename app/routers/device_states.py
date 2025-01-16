@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from app.models.device_state import DeviceState
 from app.models.device import Device
@@ -13,15 +13,23 @@ from fastapi.security import HTTPAuthorizationCredentials
 router = APIRouter()
 
 @router.get("/{guid}")
-def get_latest_device_states(guid: str, db: Session = Depends(get_db), token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
+def get_latest_device_states(
+    guid: str,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
     user_id = get_current_user(token, db)
 
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+        )
 
     if greenhouse.id_user != user_id:
-        raise HTTPException(status_code=403, detail="Access denied to this greenhouse")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+        )
 
     subquery = (
         db.query(
@@ -45,7 +53,9 @@ def get_latest_device_states(guid: str, db: Session = Depends(get_db), token: HT
     )
 
     if not latest_states:
-        raise HTTPException(status_code=404, detail="No device states found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Состояния устройств не найдены"
+        )
 
     response_data = {
         "latest_device_states": [
@@ -57,20 +67,43 @@ def get_latest_device_states(guid: str, db: Session = Depends(get_db), token: HT
         ],
     }
 
-    return JSONResponse(content=response_data)
+    return JSONResponse(
+        content=response_data,
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
 
 
 @router.post("/{guid}/control/{control_name}/{state}")
-def control_device(guid: str, control_name: str, state: int, db: Session = Depends(get_db)):
+def control_device(
+    guid: str,
+    control_name: str,
+    state: int,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
+    user_id = get_current_user(token, db)
 
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
-        raise HTTPException(status_code=404, detail="Greenhouse not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+        )
+
+    if greenhouse.id_user != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+        )
 
     mqtt_topic = f"m/{guid}/c/{control_name}"
 
     try:
         publish_to_mqtt(mqtt_topic, state)
-        return {"message": f"Command sent: {control_name} set to {state}"}
+        return JSONResponse(
+            content={"message": f"Команда отправлена: {control_name} установлено в {state}"},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to publish MQTT message: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при публикации MQTT сообщения: {e}",
+        )

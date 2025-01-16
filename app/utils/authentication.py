@@ -1,16 +1,16 @@
 import bcrypt
 import jwt
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, status
 from sqlalchemy.orm import Session
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.models.user import User
 from app.dependencies import get_db
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 import os
 
 # load_dotenv()
-
 # SECRET_KEY = os.getenv("SECRET_KEY")
+
 SECRET_KEY = "my_secret_key"
 ALGORITHM = "HS256"
 auth_scheme = HTTPBearer()
@@ -21,19 +21,36 @@ def hash_password(password: str) -> str:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode(), hashed_password.encode())
 
-def create_access_token(data: dict):
+def create_access_token(data: dict) -> str:
     to_encode = data.copy()
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def get_current_user(token: HTTPAuthorizationCredentials, db: Session = Depends(get_db)) -> int:
-    payload = jwt.decode(token.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+def get_current_user(
+    token: HTTPAuthorizationCredentials,
+    db: Session = Depends(get_db)
+) -> int:
+    try:
+        payload = jwt.decode(token.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Срок действия токена истёк",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Некорректный токен",
+        )
 
     email: str = payload.get("sub")
     if email is None:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Недействительные учетные данные",
+        )
+
     user = db.query(User).filter(User.email == email).first()
 
-    if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
     return user.id_user
