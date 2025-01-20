@@ -39,12 +39,16 @@ def bind_greenhouse(
 
     if not greenhouse:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Некорректный GUID или PIN теплицы"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Некорректный GUID или PIN теплицы",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     if greenhouse.id_user and greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Теплица уже привязана к другому пользователю"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Теплица уже привязана к другому пользователю",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     greenhouse.id_user = user_id
@@ -67,11 +71,17 @@ def unbind_greenhouse(
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == greenhouse_data.guid).first()
 
     if not greenhouse:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
     if greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ к отвязке теплицы запрещен"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ к отвязке теплицы запрещен",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     greenhouse.id_user = None
@@ -95,12 +105,16 @@ def update_greenhouse_title(
 
     if not greenhouse:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     if greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     greenhouse.title = greenhouse_update.title

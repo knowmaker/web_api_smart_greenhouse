@@ -22,12 +22,16 @@ def get_latest_sensor_readings(
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     if greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     subquery = (
@@ -53,7 +57,9 @@ def get_latest_sensor_readings(
 
     if not latest_readings:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Данные с датчиков не найдены"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Данные с датчиков не найдены",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     response_data = {

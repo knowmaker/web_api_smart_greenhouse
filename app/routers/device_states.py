@@ -23,12 +23,16 @@ def get_latest_device_states(
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     if greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     subquery = (
@@ -54,7 +58,9 @@ def get_latest_device_states(
 
     if not latest_states:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Состояния устройств не найдены"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Состояния устройств не найдены",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     response_data = {
@@ -86,12 +92,16 @@ def control_device(
     greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
     if not greenhouse:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Теплица не найдена"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     if greenhouse.id_user != user_id:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Доступ запрещён"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     mqtt_topic = f"m/{guid}/c/{control_name}"
@@ -106,4 +116,5 @@ def control_device(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Ошибка при публикации MQTT сообщения: {e}",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )

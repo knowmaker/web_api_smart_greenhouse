@@ -25,6 +25,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     return JSONResponse(
         content={"message": "Пользователь успешно создан"},
         status_code=status.HTTP_201_CREATED,
+        headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
 
@@ -34,7 +35,9 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
 
     if not db_user or not verify_password(user.password, db_user.password):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Неверные учетные данные"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверные учетные данные",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     # Генерация токена
@@ -75,7 +78,9 @@ def update_user(
 
     if not current_user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     # Обновление имени или фамилии
