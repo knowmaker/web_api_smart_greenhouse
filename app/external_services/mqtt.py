@@ -3,12 +3,15 @@ from paho.mqtt.client import Client
 from sqlalchemy.orm import Session
 from app.dependencies import SessionLocal
 from app.models.sensor_reading import SensorReading
-from app.models.greenhouse import Greenhouse
 from app.models.device_state import DeviceState
+from app.models.setting import Setting
+from app.models.greenhouse import Greenhouse
+
 
 MQTT_BROKER = "broker.emqx.io"
 TOPIC_SENSOR_PATTERN = "m/+/d/cur"
 TOPIC_DEVICE_PATTERN = "m/+/st/cur"
+TOPIC_SETTING_PATTERN = "m/+/s/cur"
 TOPIC_REGISTER_PATTERN = "m/+/reg"
 
 client = Client()
@@ -73,6 +76,18 @@ def on_message(client, userdata, msg):
                 db.add(new_state)
             print(f"Device states saved for GUID {guid}")
 
+        # Обработка сообщения для топика setting
+        elif msg.topic.endswith("s/cur"):
+            for key, value in data.items():
+                id_parameter= int(key)
+                new_setting = Setting(
+                    id_parameter=id_parameter,
+                    id_greenhouse=greenhouse.id_greenhouse,
+                    value=value,
+                )
+                db.add(new_setting)
+            print(f"Settings saved for GUID {guid}")
+
         db.commit()
     except Exception as e:
         print(f"Error processing message: {e}")
@@ -83,6 +98,7 @@ def start_mqtt_listener():
     client.subscribe([
         (TOPIC_SENSOR_PATTERN, 0),
         (TOPIC_DEVICE_PATTERN, 0),
+        (TOPIC_SETTING_PATTERN, 0),
         (TOPIC_REGISTER_PATTERN, 0)
     ])
     client.loop_start()
