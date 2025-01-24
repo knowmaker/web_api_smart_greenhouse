@@ -76,3 +76,37 @@ def get_latest_sensor_readings(
         content=response_data,
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
+
+
+
+
+import firebase_admin
+from firebase_admin import credentials, messaging
+
+cred = credentials.Certificate("smart-greenhouse-24953-firebase-adminsdk-fbsvc-e37e4bd4bb.json")
+firebase_admin.initialize_app(cred)
+
+def send_push_notification(fcm_token: str, title: str, body: str):
+    message = messaging.Message(
+        notification=messaging.Notification(
+            title=title,
+            body=body,
+        ),
+        token=fcm_token,
+    )
+
+    response = messaging.send(message)
+    return response
+
+@router.post("/send_notification/")
+async def send_notification():
+    try:
+        response = send_push_notification(
+            fcm_token="",
+            title="Пример уведомления",
+            body="Это пример тела уведомления."
+        )
+        print("Уведомление успешно отправлено:", response)
+    except Exception as e:
+        print("Ошибка при отправке уведомления:", e)
+

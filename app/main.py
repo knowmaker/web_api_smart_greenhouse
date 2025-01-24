@@ -10,6 +10,7 @@ from app.models.device import Device
 from app.models.user import User
 from app.models.parameter import Parameter
 from app.models.setting import Setting
+from app.models.sensor_alert_state import SensorAlertState
 
 app = FastAPI()
 @app.get("/")

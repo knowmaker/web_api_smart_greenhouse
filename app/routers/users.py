@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from app.schemas.user import UserCreate, UserLogin, UserUpdate
+from app.schemas.user import UserCreate, UserLogin, UserUpdate, FCMTokenPayload
 from app.models.user import User
 from app.dependencies import get_db
 from app.utils.authentication import hash_password, verify_password, create_access_token
@@ -93,5 +93,31 @@ def update_user(
 
     return JSONResponse(
         content={"message": "Данные пользователя успешно обновлены"},
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+
+@router.put("/fcm")
+def update_fcm_token(
+    payload: FCMTokenPayload,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
+    user_id = get_current_user(token, db)
+
+    user = db.query(User).filter(User.id_user == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    if user.fcm_token != payload.fcm_token:
+        user.fcm_token = payload.fcm_token
+        db.commit()
+        db.refresh(user)
+
+    return JSONResponse(
+        content={"message": "FCM-токен успешно обновлен"},
         headers={"Content-Type": "application/json; charset=utf-8"},
     )

@@ -10,3 +10,4 @@ class User(Base):
     last_name = Column(String, nullable=True)
     first_name = Column(String, nullable=True)
     greenhouses = relationship("Greenhouse", back_populates="owner")
+    fcm_token = Column(String, nullable=True)

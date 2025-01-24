@@ -15,3 +15,6 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     first_name: Optional[str] = Field(None, title="Имя")
     last_name: Optional[str] = Field(None, title="Фамилия")
+
+class FCMTokenPayload(BaseModel):
+    fcm_token: str

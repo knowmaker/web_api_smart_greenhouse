@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from paho.mqtt.client import Client
 from sqlalchemy.orm import Session
 from app.dependencies import SessionLocal
@@ -6,7 +7,8 @@ from app.models.sensor_reading import SensorReading
 from app.models.device_state import DeviceState
 from app.models.setting import Setting
 from app.models.greenhouse import Greenhouse
-
+from app.models.sensor_alert_state import SensorAlertState
+from app.routers.sensor_readings import send_push_notification
 
 MQTT_BROKER = "broker.emqx.io"
 TOPIC_SENSOR_PATTERN = "m/+/d/cur"
@@ -54,6 +56,7 @@ def on_message(client, userdata, msg):
 
         # Обработка сообщения для топика sensor_reading
         if msg.topic.endswith("d/cur"):
+            notifications = []
             for key, value in data.items():
                 id_sensor = int(key)
                 new_reading = SensorReading(
@@ -62,6 +65,66 @@ def on_message(client, userdata, msg):
                     value=value,
                 )
                 db.add(new_reading)
+
+                # Получаем состояние уведомления для этого датчика
+                alert_state = db.query(SensorAlertState).filter(
+                    SensorAlertState.id_sensor == id_sensor,
+                    SensorAlertState.id_greenhouse == greenhouse.id_greenhouse
+                ).first()
+
+                if not alert_state:
+                    # Если состояние ещё не создано, создаём его
+                    alert_state = SensorAlertState(
+                        id_sensor=id_sensor,
+                        id_greenhouse=greenhouse.id_greenhouse,
+                        last_alert_sent=False
+                    )
+                    db.add(alert_state)
+
+                # Логика проверки превышения порогов
+                if id_sensor == 1 and value > 60:  # Температура воздуха
+                    if not alert_state.last_alert_sent:
+                        notifications.append(f"Температура воздуха превышает 60°C ({value}°C)")
+                        alert_state.last_alert_sent = True
+                        alert_state.alert_timestamp = datetime.utcnow()
+                elif id_sensor == 2 and value > 80:  # Влажность воздуха
+                    if not alert_state.last_alert_sent:
+                        notifications.append(f"Влажность воздуха превышает 80% ({value}%)")
+                        alert_state.last_alert_sent = True
+                        alert_state.alert_timestamp = datetime.utcnow()
+                elif id_sensor == 3 and value > 85:  # Влажность почвы 1
+                    if not alert_state.last_alert_sent:
+                        notifications.append(f"Влажность почвы 1 превышает 85% ({value}%)")
+                        alert_state.last_alert_sent = True
+                        alert_state.alert_timestamp = datetime.utcnow()
+                elif id_sensor == 4 and value > 85:  # Влажность почвы 2
+                    if not alert_state.last_alert_sent:
+                        notifications.append(f"Влажность почвы 2 превышает 85% ({value}%)")
+                        alert_state.last_alert_sent = True
+                        alert_state.alert_timestamp = datetime.utcnow()
+                else:
+                    # Если значение вернулось в норму, сбрасываем флаг уведомления
+                    alert_state.last_alert_sent = False
+
+                db.add(alert_state)
+
+            user = greenhouse.owner
+
+            # Если есть уведомления и у пользователя есть FCM-токены, отправляем их
+            # if notifications and user and user.fcm_tokens:
+            #     for token in user.fcm_tokens:
+            #         title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
+            #         body = "\n".join(notifications)
+            #         send_push_notification(token, title, body)
+            #     print(f"Уведомления отправлены для теплицы {guid}: {notifications}")
+            # else:
+            #     print(f"Пропущено уведомление для теплицы {guid}: пользователь отсутствует или нет токенов")
+            if notifications and user and user.fcm_token:
+                title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
+                body = "\n".join(notifications)
+                send_push_notification(user.fcm_token, title, body)
+                print(f"Уведомления отправлены для теплицы {guid}: {notifications}")
+
             print(f"Sensor readings saved for GUID {guid}")
 
         # Обработка сообщения для топика device_state
