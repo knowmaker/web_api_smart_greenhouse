@@ -8,6 +8,7 @@ from app.models.device_state import DeviceState
 from app.models.sensor import Sensor
 from app.models.device import Device
 from app.models.user import User
+from app.models.fcm_token import FCMToken
 from app.models.parameter import Parameter
 from app.models.setting import Setting
 from app.models.sensor_alert_state import SensorAlertState
