@@ -8,6 +8,8 @@ from sqlalchemy.sql import func
 from fastapi.responses import JSONResponse
 from app.utils.authentication import get_current_user, auth_scheme
 from fastapi.security import HTTPAuthorizationCredentials
+from app.external_services.fcm import send_push_notification
+from app.models.fcm_token import FCMToken
 
 router = APIRouter()
 
@@ -79,34 +81,22 @@ def get_latest_sensor_readings(
 
 
 
-
-import firebase_admin
-from firebase_admin import credentials, messaging
-
-cred = credentials.Certificate("smart-greenhouse-24953-firebase-adminsdk-fbsvc-e37e4bd4bb.json")
-firebase_admin.initialize_app(cred)
-
-def send_push_notification(fcm_token: str, title: str, body: str):
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title=title,
-            body=body,
-        ),
-        token=fcm_token,
-    )
-
-    response = messaging.send(message)
-    return response
-
 @router.post("/send_notification/")
-async def send_notification():
+async def send_notification(id_test: int, title: str, body: str, db: Session = Depends(get_db)):
     try:
-        response = send_push_notification(
-            fcm_token="",
-            title="Пример уведомления",
-            body="Это пример тела уведомления."
-        )
-        print("Уведомление успешно отправлено:", response)
+        user_tokens = db.query(FCMToken).filter(FCMToken.id_user == id_test).all()
+
+        if not user_tokens:
+            return {"message": "У пользователя нет зарегистрированных FCM-токенов."}
+
+        # Отправляем уведомления для всех токенов пользователя
+        for token in user_tokens:
+            send_push_notification(fcm_token=token.token, title=title, body=body)
+            print(token.token)
+
+        return {"message": "Уведомления успешно отправлены."}
     except Exception as e:
-        print("Ошибка при отправке уведомления:", e)
+        print(f"Ошибка при отправке уведомления: {e}")
+        return {"error": "Произошла ошибка при отправке уведомления."}
+
 

@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from app.schemas.user import UserCreate, UserLogin, UserUpdate, FCMTokenPayload
+from app.schemas.user import UserCreate, UserLogin, UserUpdate
+from app.schemas.fcm_token import  FCMTokenPayload
 from app.models.user import User
+from app.models.fcm_token import FCMToken
 from app.dependencies import get_db
 from app.utils.authentication import hash_password, verify_password, create_access_token
 from app.utils.authentication import get_current_user, auth_scheme
@@ -112,10 +114,12 @@ def update_fcm_token(
             headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
-    if user.fcm_token != payload.fcm_token:
-        user.fcm_token = payload.fcm_token
-        db.commit()
-        db.refresh(user)
+    existing_token = db.query(FCMToken).filter(FCMToken.token == payload.fcm_token).first()
+    if not existing_token:
+        new_token = FCMToken(id_user=user_id, token=payload.fcm_token)
+        db.add(new_token)
+
+    db.commit()
 
     return JSONResponse(
         content={"message": "FCM-токен успешно обновлен"},

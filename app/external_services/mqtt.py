@@ -8,7 +8,7 @@ from app.models.device_state import DeviceState
 from app.models.setting import Setting
 from app.models.greenhouse import Greenhouse
 from app.models.sensor_alert_state import SensorAlertState
-from app.routers.sensor_readings import send_push_notification
+from app.external_services.fcm import send_push_notification
 
 MQTT_BROKER = "broker.emqx.io"
 TOPIC_SENSOR_PATTERN = "m/+/d/cur"
@@ -110,20 +110,18 @@ def on_message(client, userdata, msg):
 
             user = greenhouse.owner
 
-            # Если есть уведомления и у пользователя есть FCM-токены, отправляем их
-            # if notifications and user and user.fcm_tokens:
-            #     for token in user.fcm_tokens:
-            #         title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
-            #         body = "\n".join(notifications)
-            #         send_push_notification(token, title, body)
-            #     print(f"Уведомления отправлены для теплицы {guid}: {notifications}")
-            # else:
-            #     print(f"Пропущено уведомление для теплицы {guid}: пользователь отсутствует или нет токенов")
-            if notifications and user and user.fcm_token:
-                title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
-                body = "\n".join(notifications)
-                send_push_notification(user.fcm_token, title, body)
+            if notifications and user and user.fcm_tokens:
+                for token in user.fcm_tokens:
+                    title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
+                    body = "\n".join(notifications)
+                    send_push_notification(token, title, body)
                 print(f"Уведомления отправлены для теплицы {guid}: {notifications}")
+
+            # if notifications and user and user.fcm_token:
+            #     title = f"Уведомление от теплицы {greenhouse.title or greenhouse.guid}"
+            #     body = "\n".join(notifications)
+            #     send_push_notification(user.fcm_token, title, body)
+            #     print(f"Уведомления отправлены для теплицы {guid}: {notifications}")
 
             print(f"Sensor readings saved for GUID {guid}")
 
