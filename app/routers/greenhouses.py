@@ -15,7 +15,7 @@ def get_user_greenhouses(
     token: HTTPAuthorizationCredentials = Depends(auth_scheme),
 ):
     user_id = get_current_user(token, db)
-    greenhouses = db.query(Greenhouse).filter(Greenhouse.id_user == user_id).all()
+    greenhouses = db.query(Greenhouse).filter(Greenhouse.id_user == user_id).order_by(Greenhouse.id_greenhouse).all()
     result = [{"guid": gh.guid, "title": gh.title} for gh in greenhouses]
 
     return JSONResponse(
