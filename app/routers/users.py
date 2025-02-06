@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-from app.schemas.user import UserCreate, UserLogin, UserUpdate
+from app.schemas.user import UserRegister, UserLogin, UserUpdate, ResendCode, VerifyEmail, ForgotPassword, ResetPassword
 from app.schemas.fcm_token import  FCMTokenPayload
 from app.models.user import User
 from app.models.fcm_token import FCMToken
 from app.dependencies import get_db
-from app.utils.authentication import hash_password, verify_password, create_access_token, create_email_token, create_reset_token, decode_email_token, decode_reset_token
+from app.utils.authentication import hash_password, verify_password, create_access_token, generate_hashed_code, verify_hashed_code
 from app.utils.authentication import get_current_user, auth_scheme
 from fastapi.security import HTTPAuthorizationCredentials
-from datetime import timedelta
 from app.external_services.email import send_email
 
 router = APIRouter()
@@ -33,12 +32,13 @@ router = APIRouter()
 #     )
 
 @router.post("/register")
-def create_user(user: UserCreate, db: Session = Depends(get_db)):
+def create_user(user: UserRegister, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
     if db_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Пользователь уже существует"
+            detail="Пользователь уже существует",
+            headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
     hashed_password = hash_password(user.password)
@@ -53,27 +53,32 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_user)
 
-    token = create_email_token(new_user.email, expires_delta=timedelta(minutes=2))
+    code, hash_code = generate_hashed_code(new_user.email, "verify_email")
 
     send_email(
-        to=user.email,
+        to=str(user.email),
         subject="Подтверждение регистрации",
         message="Ваш код для подтверждения почты:",
-        code=token
+        code=code
     )
 
     return JSONResponse(
-        content={"message": "Пользователь создан. Проверьте почту для подтверждения."},
+        content={"hash_code": hash_code, "message": "Пользователь создан. Проверьте почту для подтверждения."},
         status_code=status.HTTP_201_CREATED,
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
 
-@router.get("/verify-email")
-def verify_email(token: str, db: Session = Depends(get_db)):
-    email = decode_email_token(token)
+@router.post("/verify-email")
+def verify_email(request: VerifyEmail, db: Session = Depends(get_db)):
+    if not verify_hashed_code(str(request.email), request.entered_code, request.received_hash, "verify_email"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный код",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(User.email == str(request.email)).first()
     if user.is_verified:
         return JSONResponse(
             content={"message": "Почта уже подтверждена"},
@@ -85,6 +90,39 @@ def verify_email(token: str, db: Session = Depends(get_db)):
 
     return JSONResponse(
         content={"message": "Почта успешно подтверждена"},
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
+
+
+@router.post("/resend-verification-code")
+def resend_verification_code(request: ResendCode, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == str(request.email)).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Пользователь не найден",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    if user.is_verified:
+        return JSONResponse(
+            content={"message": "Почта уже подтверждена"},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    # Генерируем новый код и его хеш
+    code, hash_code = generate_hashed_code(user.email, "verify_email")
+
+    send_email(
+        to=user.email,
+        subject="Повторный код подтверждения",
+        message="Ваш новый код для подтверждения почты:",
+        code=code
+    )
+
+    return JSONResponse(
+        content={"hash_code": hash_code, "message": "Новый код отправлен на почту"},
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
@@ -151,9 +189,9 @@ def update_user(
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
-@router.get("/forgot-password")
-def forgot_password(email: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == email).first()
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPassword, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == str(request.email)).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -168,26 +206,31 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
             headers={"Content-Type": "application/json; charset=utf-8"}
         )
 
-    token = create_reset_token(user.email, expires_delta=timedelta(minutes=2))
+    code, hash_code = generate_hashed_code(user.email, "reset_password")
 
     send_email(
         to=user.email,
         subject="Сброс пароля",
         message="Ваш код для сброса пароля:",
-        code=token
+        code=code
     )
 
     return JSONResponse(
-        content={"message": "Инструкция по сбросу пароля отправлена на почту"},
+        content={"hash_code": hash_code, "message": "Проверьте почту для сброса пароля."},
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
 @router.post("/reset-password")
-def reset_password(token: str, new_password: str, db: Session = Depends(get_db)):
-    email = decode_reset_token(token)
+def reset_password(request: ResetPassword, db: Session = Depends(get_db)):
+    if not verify_hashed_code(str(request.email), request.entered_code, request.received_hash, "reset_password"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Неверный код",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
-    user = db.query(User).filter(User.email == email).first()
-    user.password = hash_password(new_password)
+    user = db.query(User).filter(User.email == str(request.email)).first()
+    user.password = hash_password(request.new_password)
     db.commit()
 
     return JSONResponse(

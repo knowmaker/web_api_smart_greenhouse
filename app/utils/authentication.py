@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.models.user import User
 from app.dependencies import get_db
-from datetime import datetime, timedelta
+import random
+import hashlib
 from dotenv import load_dotenv
 import os
 
@@ -25,15 +26,11 @@ def create_access_token(data: dict) -> str:
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def create_email_token(email: str, expires_delta: timedelta) -> str:
-    expire = datetime.utcnow() + expires_delta
-    to_encode = {"sub": email, "exp": expire, "token_type": "email_verification"}
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-def create_reset_token(email: str, expires_delta: timedelta) -> str:
-    expire = datetime.utcnow() + expires_delta
-    to_encode = {"sub": email, "exp": expire, "token_type": "password_reset"}
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+def generate_hashed_code(email: str, action: str):
+    code = str(random.randint(100000, 999999))
+    salt = f"{email}{SECRET_KEY}{action}"
+    hash_code = hashlib.sha256(f"{code}{salt}".encode()).hexdigest()
+    return code, hash_code
 
 def get_current_user(
     token: HTTPAuthorizationCredentials,
@@ -54,37 +51,7 @@ def get_current_user(
 
     return user.id_user
 
-
-def decode_email_token(token: str) -> str:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Срок действия токена истёк")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный токен")
-
-    if payload.get("token_type") != "email_verification":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный тип токена")
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный токен (нет email)")
-
-    return email
-
-
-def decode_reset_token(token: str) -> str:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Срок действия токена истёк")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный токен")
-
-    if payload.get("token_type") != "password_reset":
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный тип токена")
-    email = payload.get("sub")
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Некорректный токен (нет email)")
-
-    return email
-
+def verify_hashed_code(email: str, entered_code: str, received_hash: str, action: str):
+    salt = f"{email}{SECRET_KEY}{action}"
+    expected_hash = hashlib.sha256(f"{entered_code}{salt}".encode()).hexdigest()
+    return expected_hash == received_hash
