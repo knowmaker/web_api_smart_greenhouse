@@ -13,24 +13,6 @@ from app.external_services.email import send_email
 
 router = APIRouter()
 
-# @router.post("/")
-# def create_user(user: UserCreate, db: Session = Depends(get_db)):
-#     hashed_password = hash_password(user.password)
-#     db_user = User(
-#         email=user.email,
-#         password=hashed_password,
-#         last_name=user.last_name,
-#         first_name=user.first_name,
-#     )
-#     db.add(db_user)
-#     db.commit()
-#     db.refresh(db_user)
-#     return JSONResponse(
-#         content={"message": "Пользователь успешно создан"},
-#         status_code=status.HTTP_201_CREATED,
-#         headers={"Content-Type": "application/json; charset=utf-8"},
-#     )
-
 @router.post("/register")
 def create_user(user: UserRegister, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -68,7 +50,6 @@ def create_user(user: UserRegister, db: Session = Depends(get_db)):
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
-
 @router.post("/verify-email")
 def verify_email(request: VerifyEmail, db: Session = Depends(get_db)):
     if not verify_hashed_code(str(request.email), request.entered_code, request.received_hash, "verify_email"):
@@ -92,7 +73,6 @@ def verify_email(request: VerifyEmail, db: Session = Depends(get_db)):
         content={"message": "Почта успешно подтверждена"},
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
-
 
 @router.post("/resend-verification-code")
 def resend_verification_code(request: ResendCode, db: Session = Depends(get_db)):
