@@ -78,10 +78,10 @@ def get_latest_sensor_readings(
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
-@router.get("/{guid}/{id_sensor}")
+@router.get("/{guid}/{label}")
 def get_sensor_data(
     guid: str,
-    id_sensor: int,
+    label: str,
     month: int = Query(..., ge=1, le=12),
     day: int = Query(None, ge=1, le=31),
     start_hour: int = Query(None, ge=0, le=23),
@@ -106,6 +106,8 @@ def get_sensor_data(
             headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
+    sensor = db.query(Sensor).filter(Sensor.label == label).first()
+    id_sensor = sensor.id_sensor
     year = datetime.utcnow().year
 
     # Если указан диапазон часов, возвращаем данные за этот диапазон
@@ -120,9 +122,12 @@ def get_sensor_data(
             SensorReading.timestamp < end_time + timedelta(hours=1)
         ).all()
 
-        result = { reading.timestamp.strftime("%Y-%m-%d %H:%M:%S"): reading.value for reading in readings }
+        result = {reading.timestamp.strftime("%Y-%m-%d %H:%M:%S"): reading.value for reading in readings}
 
-        return {"sensor_id": id_sensor, "data": result}
+        return JSONResponse(
+            content={"data": result},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
     # Если указан только день, считаем среднее по каждой половине часа
     elif day is not None and start_hour is None and end_hour is None:
@@ -152,14 +157,17 @@ def get_sensor_data(
             half = "00-30" if minute < 30 else "30-59"
             if hour_str not in result:
                 result[hour_str] = {}
-            result[hour_str][half] = avg_value
+            result[hour_str][half] = float(avg_value)
 
-        return {"sensor_id": id_sensor, "data": result}
+        return JSONResponse(
+            content={"data": result},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
     # Если день не указан, считаем среднее значение за каждый день месяца
     elif day is None and start_hour is None and end_hour is None:
         start_time = datetime(year, month, 1, 0, 0)
-        end_time = datetime(year, month, 31, 23, 59)  # Максимально возможный день
+        end_time = datetime(year, month, 31, 23, 59)
 
         daily_avg = (
             db.query(
@@ -177,9 +185,16 @@ def get_sensor_data(
             .all()
         )
 
-        result = {day.strftime("%Y-%m-%d"): avg_value for day, avg_value in daily_avg}
+        result = {day.strftime("%Y-%m-%d"): float(avg_value) for day, avg_value in daily_avg}
 
-        return {"sensor_id": id_sensor, "data": result}
+        return JSONResponse(
+                content={"data": result},
+                headers={"Content-Type": "application/json; charset=utf-8"},
+            )
 
     else:
-        return {"error": "Некорректные параметры. Укажите либо диапазон часов, либо день, либо оставьте все пустыми для месячного отчета"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректные параметры. Укажите либо диапазон часов, либо день, либо оставьте все пустыми для месячного отчета",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
