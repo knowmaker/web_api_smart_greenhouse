@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, status, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.models.sensor_reading import SensorReading
 from app.models.sensor import Sensor
@@ -8,8 +8,7 @@ from sqlalchemy.sql import func
 from fastapi.responses import JSONResponse
 from app.utils.authentication import get_current_user, auth_scheme
 from fastapi.security import HTTPAuthorizationCredentials
-from app.external_services.fcm import send_push_notification
-from app.models.fcm_token import FCMToken
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -79,24 +78,108 @@ def get_latest_sensor_readings(
         headers={"Content-Type": "application/json; charset=utf-8"},
     )
 
+@router.get("/{guid}/{id_sensor}")
+def get_sensor_data(
+    guid: str,
+    id_sensor: int,
+    month: int = Query(..., ge=1, le=12),
+    day: int = Query(None, ge=1, le=31),
+    start_hour: int = Query(None, ge=0, le=23),
+    end_hour: int = Query(None, ge=0, le=23),
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme)
+):
+    user_id = get_current_user(token, db)
 
+    greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
+    if not greenhouse:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
-@router.post("/send_notification/")
-async def send_notification(id_test: int, title: str, body: str, db: Session = Depends(get_db)):
-    try:
-        user_tokens = db.query(FCMToken).filter(FCMToken.id_user == id_test).all()
+    if greenhouse.id_user != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
-        if not user_tokens:
-            return {"message": "У пользователя нет зарегистрированных FCM-токенов."}
+    year = datetime.utcnow().year
 
-        # Отправляем уведомления для всех токенов пользователя
-        for token in user_tokens:
-            send_push_notification(fcm_token=token.token, title=title, body=body)
-            print(token.token)
+    # Если указан диапазон часов, возвращаем данные за этот диапазон
+    if start_hour is not None and end_hour is not None:
+        start_time = datetime(year, month, day, start_hour, 0)
+        end_time = datetime(year, month, day, end_hour, 0)
 
-        return {"message": "Уведомления успешно отправлены."}
-    except Exception as e:
-        print(f"Ошибка при отправке уведомления: {e}")
-        return {"error": "Произошла ошибка при отправке уведомления."}
+        readings = db.query(SensorReading).filter(
+            SensorReading.id_sensor == id_sensor,
+            SensorReading.id_greenhouse == greenhouse.id_greenhouse,
+            SensorReading.timestamp >= start_time,
+            SensorReading.timestamp < end_time + timedelta(hours=1)
+        ).all()
 
+        result = { reading.timestamp.strftime("%Y-%m-%d %H:%M:%S"): reading.value for reading in readings }
 
+        return {"sensor_id": id_sensor, "data": result}
+
+    # Если указан только день, считаем среднее по каждой половине часа
+    elif day is not None and start_hour is None and end_hour is None:
+        start_time = datetime(year, month, day, 0, 0)
+        end_time = datetime(year, month, day, 23, 59)
+
+        half_hour_avg = (
+            db.query(
+                func.date_trunc('hour', SensorReading.timestamp).label("hour"),
+                func.extract('minute', SensorReading.timestamp).label("minute"),
+                func.avg(SensorReading.value).label("avg_value")
+            )
+            .filter(
+                SensorReading.id_sensor == id_sensor,
+                SensorReading.id_greenhouse == greenhouse.id_greenhouse,
+                SensorReading.timestamp >= start_time,
+                SensorReading.timestamp <= end_time
+            )
+            .group_by("hour", "minute")
+            .order_by("hour", "minute")
+            .all()
+        )
+
+        result = {}
+        for hour, minute, avg_value in half_hour_avg:
+            hour_str = hour.strftime("%Y-%m-%d %H:00")
+            half = "00-30" if minute < 30 else "30-59"
+            if hour_str not in result:
+                result[hour_str] = {}
+            result[hour_str][half] = avg_value
+
+        return {"sensor_id": id_sensor, "data": result}
+
+    # Если день не указан, считаем среднее значение за каждый день месяца
+    elif day is None and start_hour is None and end_hour is None:
+        start_time = datetime(year, month, 1, 0, 0)
+        end_time = datetime(year, month, 31, 23, 59)  # Максимально возможный день
+
+        daily_avg = (
+            db.query(
+                func.date_trunc('day', SensorReading.timestamp).label("day"),
+                func.avg(SensorReading.value).label("avg_value")
+            )
+            .filter(
+                SensorReading.id_sensor == id_sensor,
+                SensorReading.id_greenhouse == greenhouse.id_greenhouse,
+                SensorReading.timestamp >= start_time,
+                SensorReading.timestamp <= end_time
+            )
+            .group_by("day")
+            .order_by("day")
+            .all()
+        )
+
+        result = {day.strftime("%Y-%m-%d"): avg_value for day, avg_value in daily_avg}
+
+        return {"sensor_id": id_sensor, "data": result}
+
+    else:
+        return {"error": "Некорректные параметры. Укажите либо диапазон часов, либо день, либо оставьте все пустыми для месячного отчета"}
