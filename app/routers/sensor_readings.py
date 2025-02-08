@@ -129,35 +129,34 @@ def get_sensor_data(
             headers={"Content-Type": "application/json; charset=utf-8"},
         )
 
-    # Если указан только день, считаем среднее по каждой половине часа
+    # Если указан только день, считаем среднее по каждому часу
     elif day is not None and start_hour is None and end_hour is None:
-        start_time = datetime(year, month, day, 0, 0)
-        end_time = datetime(year, month, day, 23, 59)
+        start_hour = datetime(year, month, day, 0, 0)
+        end_hour = datetime(year, month, day, 23, 59)
 
-        half_hour_avg = (
+        hourly_data = (
             db.query(
                 func.date_trunc('hour', SensorReading.timestamp).label("hour"),
-                func.extract('minute', SensorReading.timestamp).label("minute"),
-                func.avg(SensorReading.value).label("avg_value")
+                func.avg(SensorReading.value).label("avg_value"),
+                func.count(SensorReading.value).label("count")
             )
             .filter(
                 SensorReading.id_sensor == id_sensor,
                 SensorReading.id_greenhouse == greenhouse.id_greenhouse,
-                SensorReading.timestamp >= start_time,
-                SensorReading.timestamp <= end_time
+                SensorReading.timestamp >= start_hour,
+                SensorReading.timestamp <= end_hour
             )
-            .group_by("hour", "minute")
-            .order_by("hour", "minute")
+            .group_by("hour")
+            .order_by("hour")
             .all()
         )
 
-        result = {}
-        for hour, minute, avg_value in half_hour_avg:
+        result = {f"{year}-{month:02d}-{day:02d} {hour:02d}:00": 0 for hour in range(24)}
+
+        # Заполняем данные, если измерений больше 50
+        for hour, avg_value, count in hourly_data:
             hour_str = hour.strftime("%Y-%m-%d %H:00")
-            half = "00-30" if minute < 30 else "30-59"
-            if hour_str not in result:
-                result[hour_str] = {}
-            result[hour_str][half] = float(avg_value)
+            result[hour_str] = round(float(avg_value), 1) if count > 5 else 0
 
         return JSONResponse(
             content={"data": result},
@@ -166,31 +165,36 @@ def get_sensor_data(
 
     # Если день не указан, считаем среднее значение за каждый день месяца
     elif day is None and start_hour is None and end_hour is None:
-        start_time = datetime(year, month, 1, 0, 0)
-        end_time = datetime(year, month, 31, 23, 59)
+        start_day = datetime(year, month, 1, 0, 0)
+        end_day = (datetime(year, month + 1, 1) - timedelta(days=1)).day  # Последний день месяца
 
-        daily_avg = (
+        daily_data = (
             db.query(
                 func.date_trunc('day', SensorReading.timestamp).label("day"),
-                func.avg(SensorReading.value).label("avg_value")
+                func.avg(SensorReading.value).label("avg_value"),
+                func.count(SensorReading.value).label("count")
             )
             .filter(
                 SensorReading.id_sensor == id_sensor,
                 SensorReading.id_greenhouse == greenhouse.id_greenhouse,
-                SensorReading.timestamp >= start_time,
-                SensorReading.timestamp <= end_time
+                SensorReading.timestamp >= start_day,
+                SensorReading.timestamp < datetime(year, month, end_day, 23, 59, 59)
             )
             .group_by("day")
             .order_by("day")
             .all()
         )
 
-        result = {day.strftime("%Y-%m-%d"): float(avg_value) for day, avg_value in daily_avg}
+        result = {f"{year}-{month:02d}-{day:02d}": 0 for day in range(1, end_day + 1)}
+
+        for day, avg_value, count in daily_data:
+            day_str = day.strftime("%Y-%m-%d")
+            result[day_str] = round(float(avg_value), 1) if count >= 12 else 0
 
         return JSONResponse(
-                content={"data": result},
-                headers={"Content-Type": "application/json; charset=utf-8"},
-            )
+            content={"data": result},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
 
     else:
         raise HTTPException(
@@ -198,3 +202,4 @@ def get_sensor_data(
             detail="Некорректные параметры. Укажите либо диапазон часов, либо день, либо оставьте все пустыми для месячного отчета",
             headers={"Content-Type": "application/json; charset=utf-8"},
         )
+
