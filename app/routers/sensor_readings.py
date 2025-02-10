@@ -151,11 +151,11 @@ def get_sensor_data(
             .all()
         )
 
-        result = {f"{year}-{month:02d}-{day:02d} {hour:02d}:00": 0 for hour in range(24)}
+        result = {f"{year}-{month:02d}-{day:02d} {hour:02d}:00-{hour + 1:02d}:00": 0 for hour in range(24)}
 
         # Заполняем данные, если измерений больше 50
         for hour, avg_value, count in hourly_data:
-            hour_str = hour.strftime("%Y-%m-%d %H:00")
+            hour_str = f"{hour.strftime('%Y-%m-%d %H:00')}-{(hour + timedelta(hours=1)).strftime('%H:00')}"
             result[hour_str] = round(float(avg_value), 1) if count > 5 else 0
 
         return JSONResponse(
