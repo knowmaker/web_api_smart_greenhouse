@@ -111,7 +111,7 @@ def get_sensor_data(
     year = datetime.utcnow().year
 
     # Если указан диапазон часов, возвращаем данные за этот диапазон
-    if start_hour is not None and end_hour is not None:
+    if day is not None and start_hour is not None and end_hour is not None:
         start_time = datetime(year, month, day, start_hour, 0)
         end_time = datetime(year, month, day, end_hour, 0)
 
