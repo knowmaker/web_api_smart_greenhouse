@@ -158,6 +158,12 @@ def get_sensor_data(
             hour_str = f"{hour.strftime('%Y-%m-%d %H:00')}-{(hour + timedelta(hours=1)).strftime('%H:00')}"
             result[hour_str] = round(float(avg_value), 1) if count > 5 else 0
 
+        if all(value == 0 for value in result.values()):
+            return JSONResponse(
+                content={"data": {}},
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
+
         return JSONResponse(
             content={"data": result},
             headers={"Content-Type": "application/json; charset=utf-8"},
@@ -190,6 +196,12 @@ def get_sensor_data(
         for day, avg_value, count in daily_data:
             day_str = day.strftime("%Y-%m-%d")
             result[day_str] = round(float(avg_value), 1) if count >= 12 else 0
+
+        if all(value == 0 for value in result.values()):
+            return JSONResponse(
+                content={"data": {}},
+                headers={"Content-Type": "application/json; charset=utf-8"}
+            )
 
         return JSONResponse(
             content={"data": result},
