@@ -30,9 +30,6 @@ def on_message(client, userdata, msg):
         db: Session = SessionLocal()
 
         greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
-        if not greenhouse:
-            print(f"Greenhouse with GUID {guid} not found")
-            return
 
         # Обработка сообщения для топика регистрации
         if msg.topic.endswith("/reg"):
@@ -56,6 +53,10 @@ def on_message(client, userdata, msg):
 
         # Обработка сообщения для топика sensor_reading
         if msg.topic.endswith("d/cur"):
+            if not greenhouse:
+                print(f"Greenhouse with GUID {guid} not found")
+                return
+
             notifications = []
             for key, value in data.items():
                 id_sensor = int(key)
@@ -127,6 +128,10 @@ def on_message(client, userdata, msg):
 
         # Обработка сообщения для топика device_state
         elif msg.topic.endswith("st/cur"):
+            if not greenhouse:
+                print(f"Greenhouse with GUID {guid} not found")
+                return
+
             for key, value in data.items():
                 id_device = int(key)
                 new_state = DeviceState(
@@ -139,6 +144,10 @@ def on_message(client, userdata, msg):
 
         # Обработка сообщения для топика setting
         elif msg.topic.endswith("s/cur"):
+            if not greenhouse:
+                print(f"Greenhouse with GUID {guid} not found")
+                return
+
             for key, value in data.items():
                 id_parameter= int(key)
                 new_setting = Setting(

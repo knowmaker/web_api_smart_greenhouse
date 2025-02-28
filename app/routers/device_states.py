@@ -107,9 +107,47 @@ def control_device(
     mqtt_topic = f"m/{guid}/c/{control_name}"
 
     try:
-        publish_to_mqtt(mqtt_topic, state)
+        publish_to_mqtt(mqtt_topic, str(state))
         return JSONResponse(
             content={"message": f"Команда отправлена: {control_name} установлено в {state}"},
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при публикации MQTT сообщения: {e}",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+@router.post("/{guid}/demo")
+def control_device(
+    guid: str,
+    db: Session = Depends(get_db),
+    token: HTTPAuthorizationCredentials = Depends(auth_scheme),
+):
+    user_id = get_current_user(token, db)
+
+    greenhouse = db.query(Greenhouse).filter(Greenhouse.guid == guid).first()
+    if not greenhouse:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Теплица не найдена",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    if greenhouse.id_user != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Доступ запрещён",
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+
+    mqtt_topic = f"m/{guid}/c/demo"
+
+    try:
+        publish_to_mqtt(mqtt_topic, "")
+        return JSONResponse(
+            content={"message": f"Команда перевода в ДЕМО отправлена"},
             headers={"Content-Type": "application/json; charset=utf-8"},
         )
     except Exception as e:
